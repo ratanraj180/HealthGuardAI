@@ -1,0 +1,31 @@
+{
+  "timestamp": 1769873683.4133146,
+  "metrics": [
+    {
+      "component": "cpu",
+      "name": "usage",
+      "value": 0.6965486148844405,
+      "timestamp": "2026-01-31T21:04:43.413252"
+    },
+    {
+      "component": "memory",
+      "name": "usage",
+      "value": 0.5301899590065051,
+      "timestamp": "2026-01-31T21:04:43.413252"
+    },
+    {
+      "component": "database",
+      "name": "latency",
+      "value": 97.5960187864679,
+      "timestamp": "2026-01-31T21:04:43.413252"
+    },
+    {
+      "component": "api",
+      "name": "latency",
+      "value": 231.47019794655466,
+      "timestamp": "2026-01-31T21:04:43.413252"
+    }
+  ],
+  "latest_report": null,
+  "incident_count": 175
+}
