@@ -86,7 +86,7 @@ st.caption("Running via st-lite (Pyodide) directly in your browser. Data resets 
 
 # Refresh mechanism
 if st.button("Refresh Data"):
-    st.rerun()
+    st.experimental_rerun()
 
 # Connect to DB
 try:
@@ -105,7 +105,7 @@ raw_metrics = db.get_latest_metrics()
 if not raw_metrics:
     st.info("No metrics in database yet. Waiting for Orchestrator...")
     time.sleep(2)
-    st.rerun()
+    st.experimental_rerun()
 
 # Parse metrics (simplified for display)
 # We want the latest one for each component
