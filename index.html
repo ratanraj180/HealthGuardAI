@@ -14,7 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.0/build/stlite.js"></script>
     <script>
         stlite.mount({
-            requirements: ["streamlit", "pandas", "sqlite3"],
+            requirements: ["streamlit", "pandas"],
             entrypoint: "app.py",
             files: {
                 "app.py": `
@@ -23,7 +23,6 @@ import pandas as pd
 import time
 import random
 from datetime import datetime
-from core.database import DatabaseManager
 
 st.set_page_config(
     page_title="HealthGuard AI Monitor",
@@ -31,201 +30,120 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- LIVE DATA GENERATION (SIMULATION) ---
-try:
-    db = DatabaseManager()
-    
-    # Check if DB is empty (first run), seed history
-    if not db.get_latest_metrics(limit=1):
-        components = ["cpu", "memory", "database", "api"]
-        names = ["usage", "usage", "latency", "latency"]
-        for i in range(20):
-            for comp, name in zip(components, names):
-                val = random.random() if "usage" in name else random.randint(20, 400)
-                db.log_metric(comp, name, val)
-    
-    # Generate NEW data for this run (The "Live" part)
-    cpu = 0.4 + (random.random() * 0.5) if random.random() > 0.7 else 0.2 + (random.random() * 0.3)
-    mem = 0.5 + (random.random() * 0.4)
-    db_lat = random.randint(20, 100) if random.random() > 0.8 else random.randint(150, 400)
-    api_lat = random.randint(50, 200)
-
-    db.log_metric("cpu", "usage", cpu)
-    db.log_metric("memory", "usage", mem)
-    db.log_metric("database", "latency", db_lat)
-    db.log_metric("api", "latency", api_lat)
-
-except Exception as e:
-    st.error(f"Simulation Error: {e}")
-# -----------------------------------------
-
 st.title("🛡️ HealthGuard AI: Autonomous SRE")
 st.markdown("### Production Environment Simulation (Browser Demo)")
 st.caption(f"Last Updated: {datetime.now().strftime('%H:%M:%S')} | Running in Browser (st-lite)")
 
-# Refresh button
-if st.button("Refresh Now"):
-    st.experimental_rerun()
+# --- SESSION STATE (The In-Memory Database) ---
+if "metrics" not in st.session_state:
+    st.session_state.metrics = []
+    # Seed initial history
+    components = ["CPU", "MEMORY", "DATABASE", "API"]
+    for i in range(20):
+        ts = datetime.now().strftime("%H:%M:%S")
+        st.session_state.metrics.append({
+            "timestamp": ts,
+            "Component": "CPU",
+            "Value": 0.2 + (random.random() * 0.3)
+        })
+        st.session_state.metrics.append({
+            "timestamp": ts,
+            "Component": "MEMORY",
+            "Value": 0.4 + (random.random() * 0.2)
+        })
+        st.session_state.metrics.append({
+            "timestamp": ts,
+            "Component": "DATABASE",
+            "Value": random.randint(20, 100)
+        })
+        st.session_state.metrics.append({
+            "timestamp": ts,
+            "Component": "API",
+            "Value": random.randint(50, 150)
+        })
 
-# --- DASHBOARD LOGIC ---
-try:
-    db = DatabaseManager()
-    
-    # Layout
-    col1, col2, col3, col4 = st.columns(4)
-    
-    # Get Metrics
-    raw_metrics = db.get_latest_metrics(limit=100)
-    
-    if not raw_metrics:
-        st.warning("Initializing system metrics...")
-        time.sleep(1)
-        st.experimental_rerun()
-    
-    # Process latest values
-    latest_metrics = {}
-    for m in raw_metrics:
-        # m = (id, timestamp, component, name, value)
-        comp = m[2]
-        name = m[3]
-        val = m[4]
-        key = f"{comp}_{name}"
-        if key not in latest_metrics:
-            latest_metrics[key] = val
-            
-    cpu_val = latest_metrics.get("cpu_usage", 0)
-    mem_val = latest_metrics.get("memory_usage", 0)
-    db_val = latest_metrics.get("database_latency", 0)
-    api_val = latest_metrics.get("api_latency", 0)
-    
-    with col1:
-        val = cpu_val * 100
-        delta_color = "inverse" if val > 80 else "normal"
-        st.metric("CPU Usage", f"{val:.1f}%", delta_color=delta_color)
+if "incidents" not in st.session_state:
+    st.session_state.incidents = []
 
-    with col2:
-        val = mem_val * 100
-        st.metric("Memory Usage", f"{val:.1f}%")
+# --- GENERATE NEW LIVE DATA ---
+cpu = 0.4 + (random.random() * 0.5) if random.random() > 0.8 else 0.2 + (random.random() * 0.3)
+mem = 0.5 + (random.random() * 0.4)
+db_lat = random.randint(150, 400) if random.random() > 0.9 else random.randint(20, 100)
+api_lat = random.randint(50, 200)
 
-    with col3:
-        st.metric("DB Latency", f"{db_val:.0f}ms", delta_color="inverse")
+ts = datetime.now().strftime("%H:%M:%S")
 
-    with col4:
-        st.metric("API Latency", f"{api_val:.0f}ms")
-        
-    # Status Banner
-    if cpu_val > 0.85:
-        st.error("🚨 CRITICAL: High CPU Usage Detected! Remediation Pipeline Active.")
-    elif db_val > 300:
-        st.warning("⚠️ WARNING: Database Latency High.")
+# Append new data
+st.session_state.metrics.append({"timestamp": ts, "Component": "CPU", "Value": cpu})
+st.session_state.metrics.append({"timestamp": ts, "Component": "MEMORY", "Value": mem})
+st.session_state.metrics.append({"timestamp": ts, "Component": "DATABASE", "Value": db_lat})
+st.session_state.metrics.append({"timestamp": ts, "Component": "API", "Value": api_lat})
+
+# Create incidents if threshold breached
+if cpu > 0.85:
+    if not st.session_state.incidents or st.session_state.incidents[0]["type"] != "CPU":
+        st.session_state.incidents.insert(0, {
+            "time": ts, 
+            "type": "CPU", 
+            "cause": "Process Stuck", 
+            "fix": "Restarted Background Service"
+        })
+
+# Keep list from growing forever
+if len(st.session_state.metrics) > 200:
+    st.session_state.metrics = st.session_state.metrics[-200:]
+
+# --- DASHBOARD UI ---
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    delta_color = "inverse" if cpu > 0.80 else "normal"
+    st.metric("CPU Usage", f"{cpu*100:.1f}%", delta_color=delta_color)
+
+with col2:
+    st.metric("Memory Usage", f"{mem*100:.1f}%")
+
+with col3:
+    st.metric("DB Latency", f"{db_lat}ms", delta_color="inverse")
+
+with col4:
+    st.metric("API Latency", f"{api_lat}ms")
+
+# Status Banner
+if cpu > 0.85:
+    st.error("🚨 CRITICAL: High CPU Usage Detected! Remediation Pipeline Active.")
+elif db_lat > 300:
+    st.warning("⚠️ WARNING: Database Latency High.")
+else:
+    st.success("✅ SYSTEM HEALTHY: All systems operational.")
+
+# Charts
+st.subheader("Live System Telemetry")
+chart_col1, chart_col2 = st.columns(2)
+
+df = pd.DataFrame(st.session_state.metrics)
+
+with chart_col1:
+    # Charts need numerical values
+    st.line_chart(df[df["Component"] == "CPU"].set_index("timestamp")["Value"])
+    st.caption("CPU Usage Over Time")
+
+with chart_col2:
+    st.subheader("Incident History")
+    if st.session_state.incidents:
+        for inc in st.session_state.incidents:
+            with st.expander(f"{inc['time']} - {inc['type']} Issue"):
+                st.write(f"**Root Cause:** {inc['cause']}")
+                st.write(f"**Auto-Fix:** {inc['fix']}")
     else:
-        st.success("✅ SYSTEM HEALTHY: All systems operational.")
-        
-    # Charts
-    st.subheader("Live System Telemetry")
-    chart_col1, chart_col2 = st.columns(2)
-    
-    metric_df = pd.DataFrame(raw_metrics, columns=["id", "timestamp", "Component", "Name", "Value"])
-    metric_df["Component"] = metric_df["Component"].str.upper()
-    
-    with chart_col1:
-        # Show component usage over time/avg
-        st.bar_chart(metric_df.head(20).pivot_table(index="Component", values="Value", aggfunc='mean'))
-        
-    with chart_col2:
-        st.subheader("Incident History")
-        incidents = db.get_incidents()
-        if incidents:
-            for inc in incidents:
-                with st.expander(f"{inc[1]} - {inc[3]}"):
-                    st.write(f"**Root Cause:** {inc[4]}")
-                    st.write(f"**Fix:** {inc[5]}")
-        else:
-            st.info("No incidents recorded.")
+        st.info("No incidents recorded.")
 
-except Exception as e:
-    st.error(f"Dashboard Error: {e}")
-
-# Auto-refresh loop
-time.sleep(1.5)
+# Auto-refresh
+if st.button("Stop Live Updates"):
+    st.stop()
+    
+time.sleep(1)
 st.experimental_rerun()
-`,
-                "core/__init__.py": "",
-                "core/database.py": `
-import sqlite3
-import json
-from datetime import datetime
-import os
-
-DB_FILE = "healthguard.db"
-
-class DatabaseManager:
-    def __init__(self):
-        self.conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-        self.create_tables()
-
-    def create_tables(self):
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS metrics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                component TEXT,
-                name TEXT,
-                value REAL
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS incidents (
-                id TEXT PRIMARY KEY,
-                timestamp TEXT,
-                status TEXT,
-                anomaly_component TEXT,
-                root_cause TEXT,
-                fix_action TEXT,
-                full_report TEXT
-            )
-        ''')
-        self.conn.commit()
-
-    def log_metric(self, component, name, value):
-        try:
-            cursor = self.conn.cursor()
-            timestamp = datetime.now().isoformat()
-            cursor.execute('''
-                INSERT INTO metrics (timestamp, component, name, value)
-                VALUES (?, ?, ?, ?)
-            ''', (timestamp, component, name, value))
-            self.conn.commit()
-        except Exception as e:
-            print(f"DB Error (log_metric): {e}")
-
-    def get_latest_metrics(self, limit=100):
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT * FROM metrics ORDER BY id DESC LIMIT ?', (limit,))
-            return cursor.fetchall()
-        except Exception:
-            return []
-            
-    def get_incidents(self, limit=10):
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT * FROM incidents ORDER BY timestamp DESC LIMIT ?', (limit,))
-            return cursor.fetchall()
-        except Exception:
-            return []
-`,
-                "config/__init__.py": "",
-                "config/settings.py": `
-THRESHOLDS = {
-    "cpu.usage": 0.85,
-    "memory.usage": 0.85,
-    "database.latency": 300,
-    "api.latency": 400
-}
-SIMULATION = True
-SLACK_WEBHOOK_URL = ""
 `
             }
         }, document.getElementById("root"))
