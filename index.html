@@ -68,6 +68,8 @@ import time
 import pandas as pd
 import os
 import sys
+import random
+from datetime import datetime
 
 # Add parent directory to path to allow imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -79,6 +81,28 @@ st.set_page_config(
     page_icon="🛡️",
     layout="wide",
 )
+
+# --- BROWSER SIMULATION: GENERATE LIVE DATA ---
+# Since there is no background orchestrator in the browser,
+# we generate new metrics every time the dashboard refreshes.
+try:
+    db = DatabaseManager()
+    
+    # Generate new random metrics
+    cpu = 0.4 + (random.random() * 0.5) if random.random() > 0.7 else 0.2 + (random.random() * 0.3)
+    mem = 0.5 + (random.random() * 0.4)
+    db_lat = random.randint(20, 100) if random.random() > 0.8 else random.randint(150, 400)
+    api_lat = random.randint(50, 200)
+
+    db.log_metric("cpu", "usage", cpu)
+    db.log_metric("memory", "usage", mem)
+    db.log_metric("database", "latency", db_lat)
+    db.log_metric("api", "latency", api_lat)
+    
+except Exception as e:
+    print(f"Simulation Error: {e}")
+# ---------------------------------------------
+
 
 st.title("🛡️ HealthGuard AI: Autonomous SRE")
 st.markdown("### Production Environment Simulation (Browser Demo)")
