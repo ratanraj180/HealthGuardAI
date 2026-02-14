@@ -32,7 +32,7 @@ st.set_page_config(
 
 st.title("🛡️ HealthGuard AI: Autonomous SRE")
 st.markdown("### Production Environment Simulation (Browser Demo)")
-st.caption(f"Last Updated: {datetime.now().strftime('%H:%M:%S')} | Running in Browser (st-lite)")
+st.caption("Last Updated: " + datetime.now().strftime('%H:%M:%S') + " | Running in Browser (st-lite)")
 
 # --- SESSION STATE (The In-Memory Database) ---
 if "metrics" not in st.session_state:
@@ -99,16 +99,16 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     delta_color = "inverse" if cpu > 0.80 else "normal"
-    st.metric("CPU Usage", f"{cpu*100:.1f}%", delta_color=delta_color)
+    st.metric("CPU Usage", "{:.1f}%".format(cpu*100), delta_color=delta_color)
 
 with col2:
-    st.metric("Memory Usage", f"{mem*100:.1f}%")
+    st.metric("Memory Usage", "{:.1f}%".format(mem*100))
 
 with col3:
-    st.metric("DB Latency", f"{db_lat}ms", delta_color="inverse")
+    st.metric("DB Latency", "{}ms".format(db_lat), delta_color="inverse")
 
 with col4:
-    st.metric("API Latency", f"{api_lat}ms")
+    st.metric("API Latency", "{}ms".format(api_lat))
 
 # Status Banner
 if cpu > 0.85:
@@ -136,9 +136,9 @@ with chart_col2:
     st.subheader("Incident History")
     if st.session_state.incidents:
         for inc in st.session_state.incidents:
-            with st.expander(f"{inc['time']} - {inc['type']} Issue"):
-                st.write(f"**Root Cause:** {inc['cause']}")
-                st.write(f"**Auto-Fix:** {inc['fix']}")
+            with st.expander("{} - {} Issue".format(inc['time'], inc['type'])):
+                st.write("**Root Cause:** " + inc['cause'])
+                st.write("**Auto-Fix:** " + inc['fix'])
     else:
         st.info("No incidents recorded.")
 
