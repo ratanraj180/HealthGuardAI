@@ -81,7 +81,8 @@ st.session_state.metrics.append({"timestamp": ts, "Component": "API", "Value": a
 
 # Create incidents if threshold breached
 if cpu > 0.85:
-    if not st.session_state.incidents or st.session_state.incidents[0]["type"] != "CPU":
+    # Avoid duplicate consecutive incidents
+    if not st.session_state.incidents or st.session_state.incidents[0]["time"] != ts:
         st.session_state.incidents.insert(0, {
             "time": ts, 
             "type": "CPU", 
@@ -125,8 +126,11 @@ df = pd.DataFrame(st.session_state.metrics)
 
 with chart_col1:
     # Charts need numerical values
-    st.line_chart(df[df["Component"] == "CPU"].set_index("timestamp")["Value"])
-    st.caption("CPU Usage Over Time")
+    # Filter by component 
+    cpu_data = df[df["Component"] == "CPU"].reset_index()
+    if not cpu_data.empty:
+        st.line_chart(cpu_data["Value"])
+    st.caption("CPU Usage Trend (Last 200 ticks)")
 
 with chart_col2:
     st.subheader("Incident History")
