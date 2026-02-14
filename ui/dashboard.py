@@ -4,6 +4,8 @@ import time
 import pandas as pd
 import os
 import sys
+import random
+from datetime import datetime
 
 # Add parent directory to path to allow imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -23,6 +25,26 @@ st.markdown("### Production Environment Simulation (With SQLite DB)")
 if st.button("Refresh Data"):
     st.rerun()
 
+# --- CLOUD DEPLOYMENT SUPPORT: SELF-DRIVING MODE ---
+# On Streamlit Cloud, main.py isn't running. We need to generate our own data.
+def ensure_live_data(db_manager):
+    """Generates a new data point if we're running in cloud/demo mode"""
+    # Simple heuristic: If we are here, we are the only active process.
+    # Generate random metrics
+    cpu = 0.4 + (random.random() * 0.5) if random.random() > 0.7 else 0.2 + (random.random() * 0.3)
+    mem = 0.5 + (random.random() * 0.4)
+    db_lat = random.randint(20, 100) if random.random() > 0.8 else random.randint(150, 400)
+    api_lat = random.randint(50, 200)
+
+    db_manager.log_metric("cpu", "usage", cpu)
+    db_manager.log_metric("memory", "usage", mem)
+    db_manager.log_metric("database", "latency", db_lat)
+    db_manager.log_metric("api", "latency", api_lat)
+    
+    # Randomly create an incident
+    if cpu > 0.9 and random.random() > 0.8:
+         pass # In a real app we'd log incidents too, but metrics are enough for movement.
+
 # Connect to DB
 try:
     db = DatabaseManager()
@@ -34,6 +56,7 @@ except Exception as e:
 col1, col2, col3, col4 = st.columns(4)
 
 # Get Metrics from DB
+ensure_live_data(db) # <--- Force new data creation on every refresh
 raw_metrics = db.get_latest_metrics()
 # Metrics table: (id, timestamp, component, name, value)
 
