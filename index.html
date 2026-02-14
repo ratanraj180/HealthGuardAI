@@ -1,21 +1,23 @@
 <!DOCTYPE html>
 <html>
-  <head>
+
+<head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>HealthGuard AI</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.0/build/stlite.css">
-  </head>
-  <body>
+</head>
+
+<body>
     <div id="root"></div>
     <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.0/build/stlite.js"></script>
     <script>
-      stlite.mount({
-        requirements: ["streamlit", "pandas"],
-        entrypoint: "setup_web.py",
-        files: {
-          "setup_web.py": `
+        stlite.mount({
+            requirements: ["streamlit", "pandas", "sqlite3"],
+            entrypoint: "setup_web.py",
+            files: {
+                "setup_web.py": `
 import streamlit as st
 import time
 import random
@@ -59,7 +61,7 @@ with open("ui/dashboard.py") as f:
     code = f.read()
     exec(code)
 `,
-          "ui/dashboard.py": `
+                "ui/dashboard.py": `
 import streamlit as st
 import json
 import time
@@ -181,8 +183,8 @@ st.caption("Powered by HealthGuard AI & SQLite")
 time.sleep(1)
 st.rerun()
 `,
-          "core/__init__.py": "",
-          "core/database.py": `
+                "core/__init__.py": "",
+                "core/database.py": `
 import sqlite3
 import json
 from datetime import datetime
@@ -272,8 +274,8 @@ class DatabaseManager:
         except Exception:
             return []
 `,
-          "config/__init__.py": "",
-          "config/settings.py": `
+                "config/__init__.py": "",
+                "config/settings.py": `
 # All system configuration in ONE place
 
 THRESHOLDS = {
@@ -293,8 +295,9 @@ RECOVERY_LIMITS = {
 SIMULATION = True # Set to False for real production use
 SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/FAKE/WEBHOOK/URL" # Replace with real URL
 `
-        }
-      }, document.getElementById("root"))
+            }
+        }, document.getElementById("root"))
     </script>
-  </body>
+</body>
+
 </html>
