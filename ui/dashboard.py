@@ -118,9 +118,21 @@ metric_df = pd.DataFrame(raw_metrics, columns=["id", "timestamp", "Component", "
 metric_df["Component"] = metric_df["Component"].str.upper()
 
 with chart_col1:
-    # Filter for just usage metrics (CPU/Memory) for the bar chart or similar
-    # Actually let's just show the latest 10 points
-    st.bar_chart(metric_df.head(20).pivot_table(index="Component", values="Value", aggfunc='mean'))
+    # Filter for just usage metrics (CPU/Memory)
+    usage_df = metric_df[metric_df["Name"] == "usage"]
+    
+    if not usage_df.empty:
+        # Pivot to have columns for each component, indexed by timestamp
+        # We need to reverse it so cheapest (oldest) is on left if we used head(), 
+        # but actually line_chart handles index. 
+        # Let's just plot the raw values.
+        
+        # Create a cleaner dataframe for the chart
+        chart_data = usage_df.pivot_table(index="timestamp", columns="Component", values="Value")
+        
+        st.line_chart(chart_data)
+    else:
+        st.info("Waiting for usage data...")
 
 with chart_col2:
     # Latest Incident Reports
