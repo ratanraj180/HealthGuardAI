@@ -15,65 +15,14 @@
     <script>
         stlite.mount({
             requirements: ["streamlit", "pandas", "sqlite3"],
-            entrypoint: "setup_web.py",
+            entrypoint: "app.py",
             files: {
-                "setup_web.py": `
+                "app.py": `
 import streamlit as st
-import time
-import random
-from core.database import DatabaseManager
-from datetime import datetime
-
-# Initialize and seed DB for the browser demo
-try:
-    db = DatabaseManager()
-    
-    # Check if we have metrics, if not, seed some data
-    if not db.get_latest_metrics(limit=1):
-        print("Seeding browser DB...")
-        components = ["cpu", "memory", "database", "api"]
-        names = ["usage", "usage", "latency", "latency"]
-        
-        # Generate some historical data
-        for i in range(20):
-            for comp, name in zip(components, names):
-                val = random.random() if "usage" in name else random.randint(20, 400)
-                db.log_metric(comp, name, val)
-        
-        # Add a sample incident
-        cursor = db.conn.cursor()
-        cursor.execute('''
-            INSERT INTO incidents (id, timestamp, status, anomaly_component, root_cause, fix_action, full_report)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', ("inc_demo_1", datetime.now().isoformat(), "RESOLVED", "cpu_usage", "Process Stuck", "Restarted Service", "Detected stuck process consuming 90% CPU."))
-        db.conn.commit()
-
-except Exception as e:
-    st.error(f"Setup Error: {e}")
-
-# Run the actual dashboard
-import sys
-import os
-sys.path.append(".")
-# We need to run the dashboard script. 
-# Since dashboard.py is a script, we can execute it.
-with open("ui/dashboard.py") as f:
-    code = f.read()
-    exec(code)
-`,
-                "ui/dashboard.py": `
-import streamlit as st
-import json
-import time
 import pandas as pd
-import os
-import sys
+import time
 import random
 from datetime import datetime
-
-# Add parent directory to path to allow imports
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 from core.database import DatabaseManager
 
 st.set_page_config(
@@ -82,13 +31,20 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- BROWSER SIMULATION: GENERATE LIVE DATA ---
-# Since there is no background orchestrator in the browser,
-# we generate new metrics every time the dashboard refreshes.
+# --- LIVE DATA GENERATION (SIMULATION) ---
 try:
     db = DatabaseManager()
     
-    # Generate new random metrics
+    # Check if DB is empty (first run), seed history
+    if not db.get_latest_metrics(limit=1):
+        components = ["cpu", "memory", "database", "api"]
+        names = ["usage", "usage", "latency", "latency"]
+        for i in range(20):
+            for comp, name in zip(components, names):
+                val = random.random() if "usage" in name else random.randint(20, 400)
+                db.log_metric(comp, name, val)
+    
+    # Generate NEW data for this run (The "Live" part)
     cpu = 0.4 + (random.random() * 0.5) if random.random() > 0.7 else 0.2 + (random.random() * 0.3)
     mem = 0.5 + (random.random() * 0.4)
     db_lat = random.randint(20, 100) if random.random() > 0.8 else random.randint(150, 400)
@@ -98,114 +54,101 @@ try:
     db.log_metric("memory", "usage", mem)
     db.log_metric("database", "latency", db_lat)
     db.log_metric("api", "latency", api_lat)
-    
-except Exception as e:
-    print(f"Simulation Error: {e}")
-# ---------------------------------------------
 
+except Exception as e:
+    st.error(f"Simulation Error: {e}")
+# -----------------------------------------
 
 st.title("🛡️ HealthGuard AI: Autonomous SRE")
 st.markdown("### Production Environment Simulation (Browser Demo)")
-st.caption("Running via st-lite (Pyodide) directly in your browser. Data resets on refresh.")
+st.caption(f"Last Updated: {datetime.now().strftime('%H:%M:%S')} | Running in Browser (st-lite)")
 
-# Refresh mechanism
-if st.button("Refresh Data"):
+# Refresh button
+if st.button("Refresh Now"):
     st.experimental_rerun()
 
-# Connect to DB
+# --- DASHBOARD LOGIC ---
 try:
     db = DatabaseManager()
-except Exception as e:
-    st.error(f"Failed to connect to Database: {e}")
-    st.stop()
-
-# Layout
-col1, col2, col3, col4 = st.columns(4)
-
-# Get Metrics from DB
-raw_metrics = db.get_latest_metrics()
-# Metrics table: (id, timestamp, component, name, value)
-
-if not raw_metrics:
-    st.info("No metrics in database yet. Waiting for Orchestrator...")
-    time.sleep(2)
-    st.experimental_rerun()
-
-# Parse metrics (simplified for display)
-# We want the latest one for each component
-latest_metrics = {}
-for m in raw_metrics:
-    # m = (id, timestamp, component, name, value)
-    comp = m[2]
-    name = m[3]
-    val = m[4]
-    key = f"{comp}_{name}"
-    if key not in latest_metrics:
-        latest_metrics[key] = val
-
-cpu_val = latest_metrics.get("cpu_usage", 0)
-mem_val = latest_metrics.get("memory_usage", 0)
-db_val = latest_metrics.get("database_latency", 0)
-api_val = latest_metrics.get("api_latency", 0)
-
-with col1:
-    val = cpu_val * 100
-    delta_color = "inverse" if val > 80 else "normal"
-    st.metric("CPU Usage", f"{val:.1f}%", delta_color=delta_color)
-
-with col2:
-    val = mem_val * 100
-    st.metric("Memory Usage", f"{val:.1f}%")
-
-with col3:
-    st.metric("DB Latency", f"{db_val:.0f}ms", delta_color="inverse")
-
-with col4:
-    st.metric("API Latency", f"{api_val:.0f}ms")
-
-# Status Banner
-if cpu_val > 0.85:
-    st.error("🚨 CRITICAL: High CPU Usage Detected! Remediation Pipeline Active.")
-elif db_val > 300:
-    st.warning("⚠️ WARNING: Database Latency High.")
-else:
-    st.success("✅ SYSTEM HEALTHY: All systems operational.")
-
-# Charts
-st.subheader("Live System Telemetry")
-chart_col1, chart_col2 = st.columns(2)
-
-# Convert DB rows to DataFrame
-metric_df = pd.DataFrame(raw_metrics, columns=["id", "timestamp", "Component", "Name", "Value"])
-# Upper case component for display
-metric_df["Component"] = metric_df["Component"].str.upper()
-
-with chart_col1:
-    # Filter for just usage metrics (CPU/Memory) for the bar chart or similar
-    # Actually let's just show the latest 10 points
-    st.bar_chart(metric_df.head(20).pivot_table(index="Component", values="Value", aggfunc='mean'))
-
-with chart_col2:
-    # Latest Incident Reports
-    st.subheader("Incident History (SQLite)")
-    incidents = db.get_incidents()
-    # (id, timestamp, status, anomaly_component, root_cause, fix_action, full_report)
     
-    if incidents:
-        for inc in incidents:
-            with st.expander(f"{inc[1]} - {inc[3]} ({inc[2]})"):
-                st.write(f"**Root Cause:** {inc[4]}")
-                st.write(f"**Fix Action:** {inc[5]}")
-                st.code(inc[6])
+    # Layout
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # Get Metrics
+    raw_metrics = db.get_latest_metrics(limit=100)
+    
+    if not raw_metrics:
+        st.warning("Initializing system metrics...")
+        time.sleep(1)
+        st.experimental_rerun()
+    
+    # Process latest values
+    latest_metrics = {}
+    for m in raw_metrics:
+        # m = (id, timestamp, component, name, value)
+        comp = m[2]
+        name = m[3]
+        val = m[4]
+        key = f"{comp}_{name}"
+        if key not in latest_metrics:
+            latest_metrics[key] = val
+            
+    cpu_val = latest_metrics.get("cpu_usage", 0)
+    mem_val = latest_metrics.get("memory_usage", 0)
+    db_val = latest_metrics.get("database_latency", 0)
+    api_val = latest_metrics.get("api_latency", 0)
+    
+    with col1:
+        val = cpu_val * 100
+        delta_color = "inverse" if val > 80 else "normal"
+        st.metric("CPU Usage", f"{val:.1f}%", delta_color=delta_color)
+
+    with col2:
+        val = mem_val * 100
+        st.metric("Memory Usage", f"{val:.1f}%")
+
+    with col3:
+        st.metric("DB Latency", f"{db_val:.0f}ms", delta_color="inverse")
+
+    with col4:
+        st.metric("API Latency", f"{api_val:.0f}ms")
+        
+    # Status Banner
+    if cpu_val > 0.85:
+        st.error("🚨 CRITICAL: High CPU Usage Detected! Remediation Pipeline Active.")
+    elif db_val > 300:
+        st.warning("⚠️ WARNING: Database Latency High.")
     else:
-        st.info("No incidents recorded in database.")
+        st.success("✅ SYSTEM HEALTHY: All systems operational.")
+        
+    # Charts
+    st.subheader("Live System Telemetry")
+    chart_col1, chart_col2 = st.columns(2)
+    
+    metric_df = pd.DataFrame(raw_metrics, columns=["id", "timestamp", "Component", "Name", "Value"])
+    metric_df["Component"] = metric_df["Component"].str.upper()
+    
+    with chart_col1:
+        # Show component usage over time/avg
+        st.bar_chart(metric_df.head(20).pivot_table(index="Component", values="Value", aggfunc='mean'))
+        
+    with chart_col2:
+        st.subheader("Incident History")
+        incidents = db.get_incidents()
+        if incidents:
+            for inc in incidents:
+                with st.expander(f"{inc[1]} - {inc[3]}"):
+                    st.write(f"**Root Cause:** {inc[4]}")
+                    st.write(f"**Fix:** {inc[5]}")
+        else:
+            st.info("No incidents recorded.")
 
-st.markdown("---")
-st.caption("Powered by HealthGuard AI & SQLite")
+except Exception as e:
+    st.error(f"Dashboard Error: {e}")
 
-# Auto-refresh at the END so everything renders first
-time.sleep(1)
-st.rerun()
+# Auto-refresh loop
+time.sleep(1.5)
+st.experimental_rerun()
 `,
                 "core/__init__.py": "",
                 "core/database.py": `
@@ -218,15 +161,11 @@ DB_FILE = "healthguard.db"
 
 class DatabaseManager:
     def __init__(self):
-        # Connect to DB (creates it if not exists)
-        # check_same_thread=False is needed for Streamlit + Asyncio concurrency
         self.conn = sqlite3.connect(DB_FILE, check_same_thread=False)
         self.create_tables()
 
     def create_tables(self):
         cursor = self.conn.cursor()
-        
-        # Metrics Table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS metrics (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -236,8 +175,6 @@ class DatabaseManager:
                 value REAL
             )
         ''')
-
-        # Incidents Table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS incidents (
                 id TEXT PRIMARY KEY,
@@ -263,25 +200,6 @@ class DatabaseManager:
         except Exception as e:
             print(f"DB Error (log_metric): {e}")
 
-    def log_incident(self, report, full_report_str):
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                INSERT INTO incidents (id, timestamp, status, anomaly_component, root_cause, fix_action, full_report)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                report.id,
-                datetime.now().isoformat(),
-                report.status.value,
-                report.anomaly.component.value,
-                report.diagnosis.root_cause,
-                report.fix.action,
-                full_report_str
-            ))
-            self.conn.commit()
-        except Exception as e:
-            print(f"DB Error (log_incident): {e}")
-    
     def get_latest_metrics(self, limit=100):
         try:
             cursor = self.conn.cursor()
@@ -289,7 +207,7 @@ class DatabaseManager:
             return cursor.fetchall()
         except Exception:
             return []
-        
+            
     def get_incidents(self, limit=10):
         try:
             cursor = self.conn.cursor()
@@ -300,24 +218,14 @@ class DatabaseManager:
 `,
                 "config/__init__.py": "",
                 "config/settings.py": `
-# All system configuration in ONE place
-
 THRESHOLDS = {
     "cpu.usage": 0.85,
     "memory.usage": 0.85,
     "database.latency": 300,
     "api.latency": 400
 }
-
-RECOVERY_LIMITS = {
-    "cpu.usage": 0.75,
-    "memory.usage": 0.75,
-    "database.latency": 200,
-    "api.latency": 250
-}
-
-SIMULATION = True # Set to False for real production use
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/FAKE/WEBHOOK/URL" # Replace with real URL
+SIMULATION = True
+SLACK_WEBHOOK_URL = ""
 `
             }
         }, document.getElementById("root"))
